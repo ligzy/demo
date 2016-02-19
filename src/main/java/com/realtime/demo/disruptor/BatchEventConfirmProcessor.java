@@ -45,8 +45,7 @@ import com.lmax.disruptor.TimeoutHandler;
  *            event implementation storing the data for sharing during exchange
  *            or parallel coordination of an event.
  */
-public final class BatchEventConfirmProcessor<T> implements EventProcessor
-{
+public final class BatchEventConfirmProcessor<T> implements EventProcessor {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExceptionHandler<? super T> exceptionHandler = new FatalExceptionHandler();
     private final DataProvider<T> dataProvider;
@@ -72,41 +71,37 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor
      * @param eventHandler
      *            is the delegate to which events are dispatched.
      */
-    public BatchEventConfirmProcessor(final DataProvider<T> dataProvider, final SequenceBarrier sequenceBarrier,
-                                      final EventHandler<? super T> eventHandler)
-    {
+    public BatchEventConfirmProcessor(final DataProvider<T> dataProvider,
+                                      final SequenceBarrier sequenceBarrier,
+                                      final EventHandler<? super T> eventHandler) {
         this.dataProvider = dataProvider;
         this.sequenceBarrier = sequenceBarrier;
         this.eventHandler = eventHandler;
-        if (eventHandler instanceof SequenceReportingEventHandler)
-        {
+        if (eventHandler instanceof SequenceReportingEventHandler) {
             ((SequenceReportingEventHandler<?>) eventHandler).setSequenceCallback(sequence);
         }
 
-        timeoutHandler = (eventHandler instanceof TimeoutHandler) ? (TimeoutHandler) eventHandler : null;
+        timeoutHandler =
+            (eventHandler instanceof TimeoutHandler) ? (TimeoutHandler) eventHandler : null;
     }
 
-    public void setSequenceBarrierComfirm(SequenceBarrier sequenceComfirm)
-    {
+    public void setSequenceBarrierComfirm(SequenceBarrier sequenceComfirm) {
         this.sequenceBarrierComfirm = sequenceComfirm;
     }
 
     @Override
-    public Sequence getSequence()
-    {
+    public Sequence getSequence() {
         return sequence;
     }
 
     @Override
-    public void halt()
-    {
+    public void halt() {
         running.set(false);
         sequenceBarrier.alert();
     }
 
     @Override
-    public boolean isRunning()
-    {
+    public boolean isRunning() {
         return running.get();
     }
 
@@ -117,10 +112,8 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor
      * @param exceptionHandler
      *            to replace the existing exceptionHandler.
      */
-    public void setExceptionHandler(final ExceptionHandler<? super T> exceptionHandler)
-    {
-        if (null == exceptionHandler)
-        {
+    public void setExceptionHandler(final ExceptionHandler<? super T> exceptionHandler) {
+        if (null == exceptionHandler) {
             throw new NullPointerException();
         }
 
@@ -134,10 +127,8 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor
      *             if this object instance is already running in a thread
      */
     @Override
-    public void run()
-    {
-        if (!running.compareAndSet(false, true))
-        {
+    public void run() {
+        if (!running.compareAndSet(false, true)) {
             throw new IllegalStateException("Thread is already running");
         }
         sequenceBarrier.clearAlert();
@@ -146,72 +137,57 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor
 
         T event = null;
         long nextSequence = sequence.get() + 1L;
-        try
-        {
-            while (true)
-            {
-                try
-                {
+        try {
+            while (true) {
+                try {
                     final long availableSequence = sequenceBarrier.waitFor(nextSequence);
 
-                    while (nextSequence <= availableSequence)
-                    {
+                    while (nextSequence <= availableSequence) {
 
                         event = dataProvider.get(nextSequence);
-                        eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence);
+                        eventHandler
+                            .onEvent(event, nextSequence, nextSequence == availableSequence);
 
                         sequence.set(nextSequence);
 
                         // 1.event.wait();
-                        // 2.�ӵȴ�
-                        long confirmSequence = -1L;
-                        do
-                        {
-                            confirmSequence = sequenceBarrierComfirm.waitFor(nextSequence);
+                        // 2.
+                        if (sequenceBarrierComfirm != null) {
+                            long confirmSequence = -1L;
+                            do {
+                                confirmSequence = sequenceBarrierComfirm.waitFor(nextSequence);
+                            } while (confirmSequence < nextSequence);
                         }
-                        while (confirmSequence < nextSequence);
+
                         nextSequence++;
+
                     }
 
                     // sequence.set(availableSequence);
-                }
-                catch (final TimeoutException e)
-                {
+                } catch (final TimeoutException e) {
                     notifyTimeout(sequence.get());
-                }
-                catch (final AlertException ex)
-                {
-                    if (!running.get())
-                    {
+                } catch (final AlertException ex) {
+                    if (!running.get()) {
                         break;
                     }
-                }
-                catch (final Throwable ex)
-                {
+                } catch (final Throwable ex) {
                     exceptionHandler.handleEventException(ex, nextSequence, event);
                     sequence.set(nextSequence);
                     nextSequence++;
                 }
             }
-        }
-        finally
-        {
+        } finally {
             notifyShutdown();
             running.set(false);
         }
     }
 
-    private void notifyTimeout(final long availableSequence)
-    {
-        try
-        {
-            if (timeoutHandler != null)
-            {
+    private void notifyTimeout(final long availableSequence) {
+        try {
+            if (timeoutHandler != null) {
                 timeoutHandler.onTimeout(availableSequence);
             }
-        }
-        catch (Throwable e)
-        {
+        } catch (Throwable e) {
             exceptionHandler.handleEventException(e, availableSequence, null);
         }
     }
@@ -219,16 +195,11 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor
     /**
      * Notifies the EventHandler when this processor is starting up
      */
-    private void notifyStart()
-    {
-        if (eventHandler instanceof LifecycleAware)
-        {
-            try
-            {
+    private void notifyStart() {
+        if (eventHandler instanceof LifecycleAware) {
+            try {
                 ((LifecycleAware) eventHandler).onStart();
-            }
-            catch (final Throwable ex)
-            {
+            } catch (final Throwable ex) {
                 exceptionHandler.handleOnStartException(ex);
             }
         }
@@ -238,16 +209,11 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor
      * Notifies the EventHandler immediately prior to this processor shutting
      * down
      */
-    private void notifyShutdown()
-    {
-        if (eventHandler instanceof LifecycleAware)
-        {
-            try
-            {
+    private void notifyShutdown() {
+        if (eventHandler instanceof LifecycleAware) {
+            try {
                 ((LifecycleAware) eventHandler).onShutdown();
-            }
-            catch (final Throwable ex)
-            {
+            } catch (final Throwable ex) {
                 exceptionHandler.handleOnShutdownException(ex);
             }
         }
