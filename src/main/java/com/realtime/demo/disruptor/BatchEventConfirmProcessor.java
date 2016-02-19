@@ -52,7 +52,7 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor {
     private final SequenceBarrier sequenceBarrier;
 
     // ȷ�ϵȴ���sequnce
-    private SequenceBarrier sequenceBarrierComfirm;
+    private SequenceBarrier sequenceBarrierComfirm = null;
 
     private final EventHandler<? super T> eventHandler;
     private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);

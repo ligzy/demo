@@ -34,8 +34,8 @@ import com.lmax.disruptor.util.DaemonThreadFactory;
 
 public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisruptor {
     private static final int NUM_EVENT_PROCESSORS = 3;
-    private static final int BUFFER_SIZE = 16;
-    private static final long ITERATIONS = 64L;
+    private static final int BUFFER_SIZE = 1024 * 8;
+    private static final long ITERATIONS = 1024L * 1024L;
     private final ExecutorService executor =
         Executors.newFixedThreadPool(NUM_EVENT_PROCESSORS, DaemonThreadFactory.INSTANCE);
 
@@ -64,9 +64,11 @@ public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisrupto
     private final SequenceBarrier sequenceBarrier = ringBuffer.newBarrier();
 
     private final FizzBuzzEventHandler fizzHandler = new FizzBuzzEventHandler(FizzBuzzStep.FIZZ);
+
     private final BatchEventConfirmProcessor<FizzBuzzEvent> batchProcessorFizz =
         new BatchEventConfirmProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrier, fizzHandler);
-
+    //BatchEventConfirmProcessor
+    //BatchEventProcessor
     private final FizzBuzzEventHandler buzzHandler = new FizzBuzzEventHandler(FizzBuzzStep.BUZZ);
     private final BatchEventConfirmProcessor<FizzBuzzEvent> batchProcessorBuzz =
         new BatchEventConfirmProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrier, buzzHandler);
@@ -102,6 +104,7 @@ public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisrupto
 
     @Override
     protected long runDisruptorPass() throws Exception {
+        System.out.println("runDisruptorPass");
         CountDownLatch latch = new CountDownLatch(1);
         fizzBuzzHandler.reset(latch, batchProcessorFizzBuzz.getSequence().get() + ITERATIONS);
 
