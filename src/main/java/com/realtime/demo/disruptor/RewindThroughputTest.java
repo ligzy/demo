@@ -23,16 +23,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import com.lmax.disruptor.AbstractPerfTestDisruptor;
-import com.lmax.disruptor.BatchEventProcessor;
 import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.Sequence;
 import com.lmax.disruptor.SequenceBarrier;
+import com.lmax.disruptor.Sequencer;
 import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.FizzBuzzEvent;
 import com.lmax.disruptor.support.FizzBuzzEventHandler;
 import com.lmax.disruptor.support.FizzBuzzStep;
 import com.lmax.disruptor.util.DaemonThreadFactory;
 
-public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisruptor {
+public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
     private static final int NUM_EVENT_PROCESSORS = 3;
     private static final int BUFFER_SIZE = 16;
     private static final long ITERATIONS = 1024L;
@@ -79,8 +80,8 @@ public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisrupto
 
     private final FizzBuzzEventHandler fizzBuzzHandler =
         new FizzBuzzEventHandler(FizzBuzzStep.FIZZ_BUZZ);
-    private final BatchEventProcessor<FizzBuzzEvent> batchProcessorFizzBuzz =
-        new BatchEventProcessor<FizzBuzzEvent>(
+    private final BatchEventRewindableProcessor<FizzBuzzEvent> batchProcessorFizzBuzz =
+        new BatchEventRewindableProcessor<FizzBuzzEvent>(
             ringBuffer,
             sequenceBarrierFizzBuzz,
             fizzBuzzHandler);
@@ -91,6 +92,7 @@ public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisrupto
 
     {
         ringBuffer.addGatingSequences(batchProcessorFizzBuzz.getSequence());
+
         batchProcessorFizz.setSequenceBarrierComfirm(sequenceBarrierConfirm);
         batchProcessorBuzz.setSequenceBarrierComfirm(sequenceBarrierConfirm);
     }
@@ -114,12 +116,59 @@ public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisrupto
 
         long start = System.currentTimeMillis();
 
-        for (long i = 0; i < ITERATIONS; i++) {
-            long sequence = ringBuffer.next();
-            ringBuffer.get(sequence).setValue(i);
-            ringBuffer.publish(sequence);
-        }
+        new Thread() {
+            @Override
+            public void run() {
+                int i = 0;
+                long pos = -1;
+                while (i < ITERATIONS) {
+                    System.out.println(
+                        "\r\nCapacity:"
+                            + ringBuffer.remainingCapacity()
+                            + ">8:"
+                            + ringBuffer.hasAvailableCapacity(8));
 
+                    if (ringBuffer.hasAvailableCapacity(8)) {
+                        long next = ringBuffer.next();
+                        FizzBuzzEvent event = ringBuffer.get(next);
+                        event.setValue(i++);
+                        ringBuffer.publish(next);
+                        long current = ringBuffer.getCursor();
+                        event = ringBuffer.get(current);
+                        System.out.println(
+                            "Published event current:" + current + " ," + event.getValue());
+                    }
+
+                    long current = ringBuffer.getCursor();
+
+                    FizzBuzzEvent event = ringBuffer.get(current);
+                    System.out.println("ringBuffer event " + (current) + "," + event.getValue());
+
+                    current = batchProcessorFizzBuzz.getSequence().get();
+                    event = ringBuffer.get(current);
+                    System.out
+                        .println("ringBuffer event FizzBuzz " + (current) + " " + event.getValue());
+
+                    long temppos = batchProcessorFizzBuzz.getSequence().get();
+                    if (temppos > pos && temppos > 0 && temppos % 10 == 0) {
+                        pos = temppos;
+                        System.out.println("rewind 5 from:" + pos);
+                        batchProcessorFizzBuzz.rewind(5);
+
+                    }
+                    current = batchProcessorFizzBuzz.getSequence().get();
+                    event = ringBuffer.get(current);
+                    System.out
+                        .println("ringBuffer event FizzBuzz " + (current) + " " + event.getValue());
+
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }.start();
         latch.await();
         long opsPerSecond = (ITERATIONS * 1000L) / (System.currentTimeMillis() - start);
 
@@ -135,6 +184,6 @@ public final class DiamondConfirmThroughputTest extends AbstractPerfTestDisrupto
     }
 
     public static void main(String[] args) throws Exception {
-        new DiamondConfirmThroughputTest().testImplementations();
+        new RewindThroughputTest().testImplementations();
     }
 }

@@ -24,7 +24,6 @@ import com.lmax.disruptor.EventProcessor;
 import com.lmax.disruptor.ExceptionHandler;
 import com.lmax.disruptor.FatalExceptionHandler;
 import com.lmax.disruptor.LifecycleAware;
-import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.Sequence;
 import com.lmax.disruptor.SequenceBarrier;
 import com.lmax.disruptor.SequenceReportingEventHandler;
@@ -33,29 +32,26 @@ import com.lmax.disruptor.TimeoutException;
 import com.lmax.disruptor.TimeoutHandler;
 
 /**
- * Convenience class for handling the batching semantics of consuming entries
- * from a {@link RingBuffer} and delegating the available events to an
- * {@link EventHandler}.
- * <p>
- * If the {@link EventHandler} also implements {@link LifecycleAware} it will be
- * notified just after the thread is started and just before the thread is
- * shutdown.
- *
- * @param <T>
- *            event implementation storing the data for sharing during exchange
- *            or parallel coordination of an event.
+ * 可以往回倒的事件处理器
+ * Title:        United Risk Management System
+ * Description:  
+ * Copyright:    Copy Right (c) 2015—2016
+ * Company:      ROOTNET
+ * @author       Jeremy Li
+ * @date         2016年2月25日
+ * @version      1.0
  */
-public final class BatchEventConfirmProcessor<T> implements EventProcessor {
+public final class BatchEventRewindableProcessor<T> implements EventProcessor {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExceptionHandler<? super T> exceptionHandler = new FatalExceptionHandler();
     private final DataProvider<T> dataProvider;
     private final SequenceBarrier sequenceBarrier;
 
-    // ȷ�ϵȴ���sequnce
     private SequenceBarrier sequenceBarrierComfirm = null;
 
     private final EventHandler<? super T> eventHandler;
     private final Sequence sequence = new Sequence(Sequencer.INITIAL_CURSOR_VALUE);
+    private long rewindPosition = sequence.get();
 
     private final TimeoutHandler timeoutHandler;
 
@@ -71,9 +67,9 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor {
      * @param eventHandler
      *            is the delegate to which events are dispatched.
      */
-    public BatchEventConfirmProcessor(final DataProvider<T> dataProvider,
-                                      final SequenceBarrier sequenceBarrier,
-                                      final EventHandler<? super T> eventHandler) {
+    public BatchEventRewindableProcessor(final DataProvider<T> dataProvider,
+                                         final SequenceBarrier sequenceBarrier,
+                                         final EventHandler<? super T> eventHandler) {
         this.dataProvider = dataProvider;
         this.sequenceBarrier = sequenceBarrier;
         this.eventHandler = eventHandler;
@@ -107,7 +103,7 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor {
 
     /**
      * Set a new {@link ExceptionHandler} for handling exceptions propagated out
-     * of the {@link BatchEventConfirmProcessor}
+     * of the {@link BatchEventRewindableProcessor}
      *
      * @param exceptionHandler
      *            to replace the existing exceptionHandler.
@@ -140,6 +136,8 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor {
         try {
             while (true) {
                 try {
+
+                    //还需要监控重发的ID号才行。
                     final long availableSequence = sequenceBarrier.waitFor(nextSequence);
 
                     while (nextSequence <= availableSequence) {
@@ -163,12 +161,19 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor {
                     }
 
                     // sequence.set(availableSequence);
+
                 } catch (final TimeoutException e) {
                     notifyTimeout(sequence.get());
                 } catch (final AlertException ex) {
                     if (!running.get()) {
                         break;
                     }
+                    //重传序号使用
+                    {
+                        nextSequence = sequence.get() + 1L;
+                        sequenceBarrier.clearAlert();
+                    }
+
                 } catch (final Throwable ex) {
                     exceptionHandler.handleEventException(ex, nextSequence, event);
                     sequence.set(nextSequence);
@@ -179,6 +184,24 @@ public final class BatchEventConfirmProcessor<T> implements EventProcessor {
             notifyShutdown();
             running.set(false);
         }
+    }
+
+    /**
+     * 往回倒多少个。
+     * @param n
+     */
+    public void rewind(long n) {
+        setposition(sequence.get() - n);
+    }
+
+    /**
+     * 防止重复多次设置。
+     * @param n
+     */
+    public void setposition(long n) {
+        rewindPosition = Math.max(n, rewindPosition);
+        sequence.set(Math.max(rewindPosition - 1, -1));
+        sequenceBarrier.alert();
     }
 
     private void notifyTimeout(final long availableSequence) {
