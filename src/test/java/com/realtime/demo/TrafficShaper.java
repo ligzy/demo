@@ -4,7 +4,6 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.RateLimiter;
-import com.google.common.util.concurrent.SmoothRateLimiter;
 
 /**
  * 流量控制类
