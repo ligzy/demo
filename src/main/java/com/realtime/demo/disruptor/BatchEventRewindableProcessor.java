@@ -67,9 +67,7 @@ public final class BatchEventRewindableProcessor<T> implements EventProcessor {
      * @param eventHandler
      *            is the delegate to which events are dispatched.
      */
-    public BatchEventRewindableProcessor(final DataProvider<T> dataProvider,
-                                         final SequenceBarrier sequenceBarrier,
-                                         final EventHandler<? super T> eventHandler) {
+    public BatchEventRewindableProcessor(final DataProvider<T> dataProvider, final SequenceBarrier sequenceBarrier, final EventHandler<? super T> eventHandler) {
         this.dataProvider = dataProvider;
         this.sequenceBarrier = sequenceBarrier;
         this.eventHandler = eventHandler;
@@ -77,8 +75,7 @@ public final class BatchEventRewindableProcessor<T> implements EventProcessor {
             ((SequenceReportingEventHandler<?>) eventHandler).setSequenceCallback(sequence);
         }
 
-        timeoutHandler =
-            (eventHandler instanceof TimeoutHandler) ? (TimeoutHandler) eventHandler : null;
+        timeoutHandler = (eventHandler instanceof TimeoutHandler) ? (TimeoutHandler) eventHandler : null;
     }
 
     public void setSequenceBarrierComfirm(SequenceBarrier sequenceComfirm) {
@@ -143,8 +140,7 @@ public final class BatchEventRewindableProcessor<T> implements EventProcessor {
                     while (nextSequence <= availableSequence) {
 
                         event = dataProvider.get(nextSequence);
-                        eventHandler
-                            .onEvent(event, nextSequence, nextSequence == availableSequence);
+                        eventHandler.onEvent(event, nextSequence, nextSequence == availableSequence);
 
                         sequence.set(nextSequence);
 
@@ -168,7 +164,8 @@ public final class BatchEventRewindableProcessor<T> implements EventProcessor {
                     if (!running.get()) {
                         break;
                     }
-                    //重传序号使用
+
+                    //重传序号
                     {
                         nextSequence = sequence.get() + 1L;
                         sequenceBarrier.clearAlert();

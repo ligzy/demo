@@ -15,7 +15,7 @@ public class Diamond {
         Disruptor<LongEvent> disruptor =
             new Disruptor<>(
                 LongEvent::new,
-                1024,
+                16,
                 executor,
                 ProducerType.SINGLE,
                 new SleepingWaitStrategy());
@@ -32,9 +32,27 @@ public class Diamond {
 
         disruptor.start();
 
-        for (int i = 0; i < 10; i++) {
-            disruptor.publishEvent((event, sequence, newValue) -> event.setValue(1), i);
-        }
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                int i = 0;
+                while (i < 1000000) {
+                    if (disruptor.getRingBuffer().hasAvailableCapacity(8)) {
+                        disruptor
+                            .publishEvent((event, sequence, newValue) -> event.setValue(1), i++);
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
+                    }
+
+                }
+            }
+
+        }).start();
 
         disruptor.shutdown();
         executor.shutdown();

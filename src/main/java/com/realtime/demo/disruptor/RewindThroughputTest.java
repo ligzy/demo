@@ -24,9 +24,7 @@ import java.util.concurrent.Executors;
 
 import com.lmax.disruptor.AbstractPerfTestDisruptor;
 import com.lmax.disruptor.RingBuffer;
-import com.lmax.disruptor.Sequence;
 import com.lmax.disruptor.SequenceBarrier;
-import com.lmax.disruptor.Sequencer;
 import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.support.FizzBuzzEvent;
 import com.lmax.disruptor.support.FizzBuzzEventHandler;
@@ -37,8 +35,7 @@ public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
     private static final int NUM_EVENT_PROCESSORS = 3;
     private static final int BUFFER_SIZE = 16;
     private static final long ITERATIONS = 1024L;
-    private final ExecutorService executor =
-        Executors.newFixedThreadPool(NUM_EVENT_PROCESSORS, DaemonThreadFactory.INSTANCE);
+    private final ExecutorService executor = Executors.newFixedThreadPool(NUM_EVENT_PROCESSORS, DaemonThreadFactory.INSTANCE);
 
     private final long expectedResult;
 
@@ -59,42 +56,32 @@ public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
 
-    private final RingBuffer<FizzBuzzEvent> ringBuffer =
-        createSingleProducer(FizzBuzzEvent.EVENT_FACTORY, BUFFER_SIZE, new YieldingWaitStrategy());
+    private final RingBuffer<FizzBuzzEvent> ringBuffer = createSingleProducer(FizzBuzzEvent.EVENT_FACTORY, BUFFER_SIZE, new YieldingWaitStrategy());
 
     private final SequenceBarrier sequenceBarrier = ringBuffer.newBarrier();
 
     private final FizzBuzzEventHandler fizzHandler = new FizzBuzzEventHandler(FizzBuzzStep.FIZZ);
 
-    private final BatchEventConfirmProcessor<FizzBuzzEvent> batchProcessorFizz =
-        new BatchEventConfirmProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrier, fizzHandler);
+    private final BatchEventConfirmProcessor<FizzBuzzEvent> batchProcessorFizz = new BatchEventConfirmProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrier, fizzHandler);
     //BatchEventConfirmProcessor
     //BatchEventProcessor
     private final FizzBuzzEventHandler buzzHandler = new FizzBuzzEventHandler(FizzBuzzStep.BUZZ);
-    private final BatchEventConfirmProcessor<FizzBuzzEvent> batchProcessorBuzz =
-        new BatchEventConfirmProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrier, buzzHandler);
+    private final BatchEventConfirmProcessor<FizzBuzzEvent> batchProcessorBuzz = new BatchEventConfirmProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrier, buzzHandler);
 
     // merge
-    private final SequenceBarrier sequenceBarrierFizzBuzz =
-        ringBuffer.newBarrier(batchProcessorFizz.getSequence(), batchProcessorBuzz.getSequence());
+    private final SequenceBarrier sequenceBarrierFizzBuzz = ringBuffer.newBarrier(batchProcessorFizz.getSequence(), batchProcessorBuzz.getSequence());
 
-    private final FizzBuzzEventHandler fizzBuzzHandler =
-        new FizzBuzzEventHandler(FizzBuzzStep.FIZZ_BUZZ);
-    private final BatchEventRewindableProcessor<FizzBuzzEvent> batchProcessorFizzBuzz =
-        new BatchEventRewindableProcessor<FizzBuzzEvent>(
-            ringBuffer,
-            sequenceBarrierFizzBuzz,
-            fizzBuzzHandler);
+    private final FizzBuzzEventHandler fizzBuzzHandler = new FizzBuzzEventHandler(FizzBuzzStep.FIZZ_BUZZ);
+    private final BatchEventRewindableProcessor<FizzBuzzEvent> batchProcessorFizzBuzz = new BatchEventRewindableProcessor<FizzBuzzEvent>(ringBuffer, sequenceBarrierFizzBuzz, fizzBuzzHandler);
 
     // 用于确认
-    private final SequenceBarrier sequenceBarrierConfirm =
-        ringBuffer.newBarrier(batchProcessorFizzBuzz.getSequence());
+    private final SequenceBarrier sequenceBarrierConfirm = ringBuffer.newBarrier(batchProcessorFizzBuzz.getSequence());
 
     {
         ringBuffer.addGatingSequences(batchProcessorFizzBuzz.getSequence());
 
-        batchProcessorFizz.setSequenceBarrierComfirm(sequenceBarrierConfirm);
-        batchProcessorBuzz.setSequenceBarrierComfirm(sequenceBarrierConfirm);
+//        batchProcessorFizz.setSequenceBarrierComfirm(sequenceBarrierConfirm);
+//        batchProcessorBuzz.setSequenceBarrierComfirm(sequenceBarrierConfirm);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -122,11 +109,7 @@ public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
                 int i = 0;
                 long pos = -1;
                 while (i < ITERATIONS) {
-                    System.out.println(
-                        "\r\nCapacity:"
-                            + ringBuffer.remainingCapacity()
-                            + ">8:"
-                            + ringBuffer.hasAvailableCapacity(8));
+                    System.out.println("\r\nCapacity:" + ringBuffer.remainingCapacity() + ">8:" + ringBuffer.hasAvailableCapacity(8));
 
                     if (ringBuffer.hasAvailableCapacity(8)) {
                         long next = ringBuffer.next();
@@ -135,8 +118,7 @@ public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
                         ringBuffer.publish(next);
                         long current = ringBuffer.getCursor();
                         event = ringBuffer.get(current);
-                        System.out.println(
-                            "Published event current:" + current + " ," + event.getValue());
+                        System.out.println("Published event current:" + current + " ," + event.getValue());
                     }
 
                     long current = ringBuffer.getCursor();
@@ -146,8 +128,7 @@ public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
 
                     current = batchProcessorFizzBuzz.getSequence().get();
                     event = ringBuffer.get(current);
-                    System.out
-                        .println("ringBuffer event FizzBuzz " + (current) + " " + event.getValue());
+                    System.out.println("ringBuffer event FizzBuzz " + (current) + " " + event.getValue());
 
                     long temppos = batchProcessorFizzBuzz.getSequence().get();
                     if (temppos > pos && temppos > 0 && temppos % 10 == 0) {
@@ -158,8 +139,7 @@ public final class RewindThroughputTest extends AbstractPerfTestDisruptor {
                     }
                     current = batchProcessorFizzBuzz.getSequence().get();
                     event = ringBuffer.get(current);
-                    System.out
-                        .println("ringBuffer event FizzBuzz " + (current) + " " + event.getValue());
+                    System.out.println("ringBuffer event FizzBuzz " + (current) + " " + event.getValue());
 
                     try {
                         Thread.sleep(1000);
