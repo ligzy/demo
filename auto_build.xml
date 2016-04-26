@@ -1,0 +1,405 @@
+<?xml version="1.0"?>
+<!-- basedir需要定位到根目录 -->
+<project name="lottery" default="build" basedir="../../" xmlns:ac="antlib:net.sf.antcontrib">
+  <description>使用Apache Ant及SVN进行自动化构建</description>
+	<!-- SVN -->
+	<property name="svn.user" value="name" />
+	<property name="svn.password" value="password" />
+	<property name="svn.version-regexp" value=".*(\[(.+)\]).*" /> <!-- 版本号规则: [xxx_v1.0] abcde, \1用于规则匹配，\2用于生成zip -->
+	<property name="svn.log-limit" value="100" /> <!-- SVN日志数上限 -->
+
+	<!-- encode设置 -->
+	<property name="encode.js" value="UTF-8" />
+	<property name="encode.css" value="UTF-8" />
+
+	<!-- 压缩输出后缀 -->
+	<property name="suffix.js" value=".min.js" />
+	<property name="suffix.css" value="_min.css" />
+
+	<!-- 声明App基准路径 -->
+	<property name="path.app" location="app/lottery" />
+
+	<!-- 声明JS基准路径 -->
+	<property name="path.js" location="res/app/lottery/js" />
+
+	<!-- 声明CSS基准路径 -->
+	<property name="path.css" location="res/app/lottery/css" />
+
+	<!-- 声明版本号文件 -->
+	<property name="path.version.tpl" location="${path.app}/app.json.tpl" />
+	<property name="path.version" location="${path.app}/app.json" />
+	<loadfile property="content.version" srcFile="${path.version.tpl}"/>
+
+	<!-- 保留版权声明 -->
+	<property name="copyright.zepto" value="/* Zepto v1.0-1-ga3cab6c - polyfill zepto detect event ajax form fx - zeptojs.com/license */" />
+
+	<!-- yuicompressor程序路径(请保持同一项目使用相同版本及设置的yuicompressor,否则计算出的校验和可能会有差别) -->
+	<property name="path.yuicompressor" location="${ant.library.dir}/yuicompressor.jar" />
+
+	<!-- 项目根目录名称 -->
+	<basename property="ns.rootname" file="${basedir}"/>
+	<basename property="ns.version" file="${path.version}" />
+
+	<!-- 声明临时目录 -->
+	<tstamp>
+		<format property="NOW" pattern="yyyyMMddhhmmss" />
+	</tstamp>
+	<property name="path.build.prefix" value="Ant.Build." />
+	<property name="path.build.name" value="${path.build.prefix}${NOW}" />
+	<property name="path.build" location="${basedir}/${path.build.name}" />
+	<property name="path.build.js" location="${path.build}/js" />
+	<property name="path.build.css" location="${path.build}/css" />
+	<property name="path.build.app" location="${path.build}/app" />
+	<property name="path.build.zip" location="${path.build}/zip" />
+	<property name="path.build.zipfile" location="${path.build.zip}/main/htdocs" />
+
+	<!-- 生成临时目录 -->
+	<target name="mkdir">
+		<echo level="info" message="正在生成临时目录..." />
+		<mkdir dir="${path.build}" />
+		<mkdir dir="${path.build.js}" />
+		<mkdir dir="${path.build.css}" />
+		<mkdir dir="${path.build.zipfile}" />
+	</target>
+
+	<!-- 拷贝资源到临时目录 -->
+	<target name="copy">
+		<echo level="info" message="正在拷贝资源到临时目录..." />
+		<!-- JS(排除所有压缩文件) -->
+		<copy todir="${path.build.js}" overwrite="true" preservelastmodified="true">
+			<fileset dir="${path.js}" excludes="**/${path.build.prefix}*/,**/*${suffix.js}" />
+		</copy>
+
+		<!-- CSS(排除所有压缩文件) -->
+		<copy todir="${path.build.css}" overwrite="true" preservelastmodified="true">
+			<fileset dir="${path.css}" excludes="**/${path.build.prefix}*/,**/*${suffix.css}" />
+		</copy>
+
+
+		<!-- 版本号 -->
+		<copy file="${path.version.tpl}" tofile="${path.build}/${ns.version}" overwrite="true" preservelastmodified="true" />
+	</target>
+
+	<!-- 压缩JS文件 -->
+	<target name="minify-js">
+		<echo level="info" message="正在压缩JS..." />
+		<apply executable="java" verbose="true" dest="${path.build.js}" failonerror="true" parallel="false">
+			<fileset dir="${path.build.js}" includes="**/*.js" excludes="**/*${suffix.js}" />
+			<arg line="-jar" />
+			<arg path="${path.yuicompressor}" />
+			<arg line="--charset ${encode.js}" />
+			<arg value="--type" />
+			<arg value="js" />
+			<arg value="-o" />
+			<targetfile />
+			<mapper type="regexp" from="^(.*)\.js$" to="\1${suffix.js}"/>
+		</apply>
+	</target>
+
+	<!-- 压缩CSS文件 -->
+	<target name="minify-css">
+		<echo level="info" message="正在压缩CSS..." />
+		<apply executable="java" verbose="true" dest="${path.build.css}" failonerror="true" parallel="false">
+			<fileset dir="${path.build.css}" includes="**/*.css" excludes="**/*${suffix.css}" />
+			<arg line="-jar" />
+			<arg path="${path.yuicompressor}" />
+			<arg line="--charset ${encode.css}" />
+			<arg value="--type" />
+			<arg value="css" />
+			<arg value="-o" />
+			<targetfile />
+			<mapper type="regexp" from="^(.*)\.css$" to="\1${suffix.css}"/>
+		</apply>
+	</target>
+
+	<!-- 合并zepto.min.js、touch.min.js、app.min.js为lottery.min.js -->
+	<target name="concat-js">
+		<echo level="info" message="正在合并zepto.min.js、touch.min.js、app.min.js为lottery.min.js ..." />
+		<concat encoding="${encode.js}" outputencoding="${encode.js}" destfile="${path.build.js}/common/lottery${suffix.js}">
+			<header trimleading="yes">${copyright.zepto}${copyright.ghostclick}</header>
+			<path path="${path.build.js}/common/zepto${suffix.js}" />
+			<path path="${path.build.js}/common/touch${suffix.js}" />
+			<path path="${path.build.js}/common/app${suffix.js}" />
+		</concat>
+	</target>
+
+	<!-- 应用更改 -->
+	<target name="apply">
+		<echo level="info" message="正在应用更改..." />
+		<copy todir="${path.js}" overwrite="true">
+			<fileset dir="${path.build.js}" />
+		</copy>
+		<copy todir="${path.css}" overwrite="true">
+			<fileset dir="${path.build.css}" />
+		</copy>
+	</target>
+
+	<!-- 更新版本配置 -->
+	<target name="update-version">
+		<echo level="info" message="正在更新版本配置..." />
+		<!-- 转义路径, 用于正则匹配 -->
+		<ac:propertyregex property="regexp.reg" override="true" casesensitive="true" global="true" input="${basedir}" regexp="\\" replace="\\\\\\\\" defaultValue="${basedir}" />
+		<ac:propertyregex property="regexp.reg" override="true" casesensitive="true" global="true" input="${regexp.reg}" regexp="\:" replace="\\\\:" defaultValue="${regexp.reg}" />
+		<ac:propertyregex property="regexp.reg" override="true" casesensitive="true" global="true" input="${regexp.reg}" regexp="\." replace="\\\\." defaultValue="${regexp.reg}" />
+
+		<ac:for param="file">
+			<path>
+				<fileset dir="${path.js}" />
+				<fileset dir="${path.css}" />
+				<fileset dir="${path.app}" />
+			</path>
+			<sequential>
+				<!-- 生成token -->
+				<ac:var name="token" unset="true" />
+				<ac:propertyregex property="token" override="true" casesensitive="true" global="true" input="@{file}" regexp="${regexp.reg}[\\/]?(.*)" select="\1" defaultValue="" />
+
+				<!-- 转义反斜杠为斜杠 -->
+				<ac:propertyregex property="token" override="true" casesensitive="true" global="true" input="${token}" regexp="\\" replace="/" defaultValue="${token}" />
+
+				<!-- 检查是否存在token -->
+				<ac:var name="replace_token" unset="true" />
+				<ac:propertyregex property="replace_token" override="true" casesensitive="true" global="true" input="${content.version}" regexp=".*(\{/${ns.rootname}/${token}\}).*" select="\1" />
+
+				<ac:if>
+					<isset property="replace_token" />
+					<ac:then>
+						<!-- 获取文件校验和(MD5) -->
+						<ac:var name="version" unset="true" />
+						<checksum property="version" file="@{file}" />
+
+						<!-- 替换token为版本号 -->
+						<replace file="${path.build}/${ns.version}" token="${replace_token}" value="${version}" />
+
+						<echo level="info" message="${replace_token} -> ${version}" />
+					</ac:then>
+				</ac:if>
+			</sequential>
+		</ac:for>
+
+		<copy file="${path.build}/${ns.version}" tofile="${path.version}" overwrite="true" />
+	</target>
+
+	<!-- 移除临时目录 -->
+	<target name="remove">
+		<echo level="info" message="正在移除临时目录..." />
+		<delete dir="${path.build}" />
+	</target>
+
+	<!-- xmltask init -->
+	<target name="xmltask-init">
+		<echo level="info" message="正在初始化xmltask..." />
+		<property name="xmltask" location="${ant.library.dir}/xmltask.jar"/>
+		<taskdef name="xmltask" classname="com.oopsconsultancy.xmltask.ant.XmlTask" classpath="${xmltask}"/>
+	</target>
+
+	<!-- svn init -->
+	<target name="svn-init">
+		<echo level="info" message="正在初始化SVN..." />
+		<path id="path.svnant">
+			<pathelement location="${ant.library.dir}/svnant/svnant.jar" />
+			<pathelement location="${ant.library.dir}/svnant/svnClientAdapter.jar" />
+			<pathelement location="${ant.library.dir}/svnant/ganymed.jar" />
+			<!-- svnkit-1.7.9 支持svn1.7.x -->
+			<pathelement location="${ant.library.dir}/svnkit-1.7.9/svnkit-1.7.9.jar" />
+			<pathelement location="${ant.library.dir}/svnkit-1.7.9/svnkit-javahl16-1.7.9.jar" />
+			<pathelement location="${ant.library.dir}/svnkit-1.7.9/sqljet-1.1.7.jar" />
+			<pathelement location="${ant.library.dir}/svnkit-1.7.9/antlr-runtime-3.4.jar" />
+			<pathelement location="${ant.library.dir}/svnkit-1.7.9/sequence-library-1.0.2.jar" />
+		</path>
+		<typedef resource="org/tigris/subversion/svnant/svnantlib.xml" classpathref="path.svnant" />
+		<svnSetting id="svn.settings" svnkit="true" javahl="false" username="${svn.user}" password="${svn.password}" failonerror="true" />
+	</target>
+
+	<!-- svn update -->
+	<target name="svn-update">
+		<echo level="info" message="正在更新SVN（update）..." />
+		<svn refid="svn.settings">
+			<update dir="${basedir}" revision="HEAD" />
+			<status path="${basedir}" textStatusProperty="svn.updateTextStatus" propStatusProperty="svn.updatePropStatus" />
+			<info target="${basedir}" />
+		</svn>
+
+		<!-- 获取SVN工作副本的基准路径 -->
+		<ac:propertyregex property="repourl" override="true" casesensitive="true" global="true" input="${svn.info.repourl}" regexp="\\" replace="\\\\\\\\" defaultValue="${svn.info.repourl}" />
+		<ac:propertyregex property="repourl" override="true" casesensitive="true" global="true" input="${repourl}" regexp="\:" replace="\\\\:" defaultValue="${repourl}" />
+		<ac:propertyregex property="repourl" override="true" casesensitive="true" global="true" input="${repourl}" regexp="\." replace="\\\\." defaultValue="${repourl}" />
+		<ac:propertyregex property="svn.basedir" override="true" casesensitive="true" global="true" input="${svn.info.url}" regexp="${repourl}(.*)" select="\1" />
+
+		<echo>textStatusProperty: ${svn.updateTextStatus}</echo>
+		<echo>propStatusProperty: ${svn.updatePropStatus}</echo>
+	</target>
+
+	<!-- svn commit -->
+	<target name="svn-commit">
+		<echo level="info" message="正在提交SVN（add、commit）..." />
+		<svn refid="svn.settings">
+			<!-- 先提交新增文件 -->
+			<!-- 使用fileset会导致失败 http://stackoverflow.com/questions/11402891/svn-ant-add-task-with-force-option-gives-is-already-under-version-control -->
+			<!-- TODO: 一个潜在的问题就是可能会把Ant.Build临时目录也svn提交了 -->
+			<add force="true" dir="${path.js}" />
+			<add force="true" dir="${path.css}" />
+			<add force="true" dir="${path.app}" />
+
+			<commit message="${svn.commitMessage}">
+				<fileset dir="${path.js}" excludes="**/${path.build.prefix}*/" />
+				<fileset dir="${path.css}" excludes="**/${path.build.prefix}*/" />
+				<fileset dir="${path.app}" excludes="**/${path.build.prefix}*/" />
+			</commit>
+
+			<status path="${basedir}" textStatusProperty="svn.textStatus" propStatusProperty="svn.propStatus" />
+		</svn>
+
+		<echo>textStatusProperty: ${svn.textStatus}</echo>
+		<echo>propStatusProperty: ${svn.propStatus}</echo>
+	</target>
+
+	<!-- 获取SVN日志 -->
+	<target name="svn-log">
+		<echo level="info" message="正在获取SVN日志..." />
+		<svn refid="svn.settings">
+			<log path="${basedir}" destFile="${path.build}/svnlog.xml" startRevision="HEAD" stopRevision="1" asXml="true" changedpathes="true" limit="${svn.log-limit}" />
+		</svn>
+	</target>
+
+	<!-- 解析SVN日志-->
+	<target name="xmltask-log">
+		<echo level="info" message="正在解析SVN日志..." />
+		<xmltask source="${path.build}/svnlog.xml">
+			<!-- 1. 查询commit message含指定版本号的节点 -->
+			<!-- 2. 排除Action=Deleted的目录或文件 -->
+			<copy property="log.paths" path="/log/logentry[contains(msg, '${svn.versionFormat}')]/paths/path[@action!='D']/text()" append="true" trim="true" propertySeparator="|" />
+		</xmltask>
+	</target>
+
+	<!-- 生成增量包 -->
+	<target name="mkzip">
+		<echo level="info" message="正在生成增量包..." />
+		<ac:for list="${log.paths}" delimiter="|" param="path">
+			<sequential>
+				<ac:var name="zip.path" unset="true" />
+				<!-- 映射SVN路径到本地工作副本路径 -->
+				<ac:propertyregex property="zip.path" override="true" casesensitive="true" global="true" input="@{path}" regexp="${svn.basedir}/?(.*)" select="\1" />
+				<ac:var name="zip.file" unset="true" />
+				<property name="zip.file" location="${basedir}/${zip.path}" />
+				<ac:var name="zip.tofile" unset="true" />
+				<property name="zip.tofile" location="${path.build.zipfile}/${zip.path}" />
+
+				<!-- 如果是文件才加以处理 -->
+				<ac:var name="zip.isfile" unset="true" />
+				<available file="${zip.file}" type="file" property="zip.isfile" />
+				<ac:if>
+					<isset property="zip.isfile" />
+					<ac:then>
+						<ac:if>
+							<!-- ant build.xml不处理 -->
+							<equals arg1="${zip.file}" arg2="${ant.file}" />
+							<ac:else>
+								<echo level="info" message="File: ${zip.file}" />
+								<copy file="${zip.file}" tofile="${zip.tofile}" overwrite="true" preservelastmodified="true" />
+							</ac:else>
+						</ac:if>
+					</ac:then>
+					<ac:else>
+						<!-- 不存在，有可能是svn deleted的目录或文件 -->
+						<ac:var name="zip.isdir" unset="true" />
+						<available file="${zip.file}" type="dir" property="zip.isdir" />
+						<ac:if>
+							<isset property="zip.isdir" />
+							<ac:then>
+								<!-- 空目录处理 -->
+								<echo level="info" message="Dir: ${zip.file}" />
+								<mkdir dir="${zip.tofile}" />
+							</ac:then>
+							<ac:else>
+								<!-- 表明当前路径为svn deleted的文件或目录，不需要处理 -->
+							</ac:else>
+						</ac:if>
+					</ac:else>
+				</ac:if>
+			</sequential>
+		</ac:for>
+
+		<!-- 生成zip包,这里排除svn commit时可能提交的Ant.Build临时目录 -->
+		<zip destfile="${basedir}/${svn.version}.zip" basedir="${path.build.zip}" excludes="**/${path.build.prefix}*/" />
+	</target>
+
+	<!-- done -->
+	<target name="done">
+		<echo level="info" message="---------------------------------------------------" />
+		<echo level="info" message="Build Successful" />
+		<ac:if>
+			<matches string="${options}" pattern="^[23]$" />
+			<ac:then>
+				<property name="zipfile" location="${basedir}/${svn.version}.zip" />
+				<echo level="info" message="Zip File: ${zipfile}" />
+			</ac:then>
+		</ac:if>
+		<echo level="info" message="---------------------------------------------------" />
+	</target>
+
+	<!-- init -->
+	<target name="init">
+		<echo level="info" message="欢迎使用Apache Ant集成自动化工具" />
+		<echo level="info" message="----------------------------------------------" />
+		<echo level="info" message="请选择你要执行的操作：" />
+		<echo level="info" message="1、资源处理（压缩、合并、更新版本号）" />
+		<echo level="info" message="2、资源处理、提交SVN" />
+		<echo level="info" message="3、资源处理、提交SVN、生成zip包" />
+		<input addproperty="options" message="" />
+
+		<ac:if>
+			<matches string="${options}" pattern="^[23]$" />
+			<ac:then>
+				<!-- SVN 处理 -->
+				<input addproperty="svn.commitMessage" message="请输入Commit Message（格式如：[xxx_v1.0] abcde）：" />
+
+				<!-- 提取SVN版本号 -->
+				<ac:propertyregex property="svn.version" override="true" casesensitive="true" global="true" input="${svn.commitMessage}" regexp="${svn.version-regexp}" select="\2" />
+				<ac:propertyregex property="svn.versionFormat" override="true" casesensitive="true" global="true" input="${svn.commitMessage}" regexp="${svn.version-regexp}" select="\1" />
+
+				<echo level="info" message="----------------------------------------------" />
+				<ac:if>
+					<isset property="svn.version" />
+					<ac:then>
+						<echo level="info" message="Commit Message：${svn.commitMessage}" />
+						<echo level="info" message="Version：${svn.version}" />
+						<echo level="info" message="----------------------------------------------" />
+
+						<ac:if>
+							<equals arg1="${options}" arg2="2" />
+							<ac:then>
+								<antcall target="option2"></antcall>
+							</ac:then>
+							<ac:else>
+								<antcall target="option3"></antcall>
+							</ac:else>
+						</ac:if>
+					</ac:then>
+					<ac:else>
+						<echo level="warning" message="Error：版本号匹配失败，请重试~" />
+					</ac:else>
+				</ac:if>
+			</ac:then>
+			<ac:elseif>
+				<equals arg1="${options}" arg2="1" />
+				<ac:then>
+					<antcall target="option1"></antcall>
+				</ac:then>
+			</ac:elseif>
+			<ac:else>
+				<echo level="warning" message="Error：选项错误~" />
+			</ac:else>
+		</ac:if>
+	</target>
+
+	<!-- options target -->
+	<!-- 1、资源处理（压缩、合并、更新版本号） -->
+	<target name="option1" depends="svn-init,svn-update,mkdir,copy,minify-js,concat-js,minify-css,apply,update-version,remove,done"></target>
+	<!-- 2、资源处理、提交SVN -->
+	<target name="option2" depends="xmltask-init,svn-init,svn-update,mkdir,copy,minify-js,concat-js,minify-css,apply,update-version,svn-commit,remove,done"></target>
+	<!-- 3、资源处理、提交SVN、生成zip包 -->
+	<target name="option3" depends="xmltask-init,svn-init,svn-update,mkdir,copy,minify-js,concat-js,minify-css,apply,update-version,svn-commit,svn-log,xmltask-log,mkzip,remove,done"></target>
+
+	<!-- build -->
+	<target name="build" depends="init"></target>
+</project>
